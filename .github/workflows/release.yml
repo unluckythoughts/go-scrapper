@@ -59,23 +59,34 @@ jobs:
           
           echo "✅ Tag $VERSION created and pushed successfully"
 
-      - name: Update latest tag
+      - name: Auto-increment version and update tags
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           # Get the latest version tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
           
-          # Delete remote latest tag if it exists
+          # Parse version components
+          VERSION_NO_V=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          
+          echo "New version: $NEW_VERSION"
+          
+          # Create and push new version tag
+          git tag -a "$NEW_VERSION" -m "Auto-release $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+          
+          # Update latest tag
           git push origin :refs/tags/latest 2>/dev/null || true
-          
-          # Delete local latest tag if it exists
           git tag -d latest 2>/dev/null || true
-          
-          # Create new latest tag pointing to current commit
-          git tag -a latest -m "Latest stable release (based on $LATEST_TAG)"
+          git tag -a latest -m "Latest stable release ($NEW_VERSION)"
           git push origin latest
           
-          echo "✅ Latest tag updated to commit $(git rev-parse --short HEAD)"
+          echo "✅ Version $NEW_VERSION created and latest tag updated"
