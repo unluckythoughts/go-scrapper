@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -134,4 +135,58 @@ func GetFloat(htmlText, selector string) (float64, error) {
 	}
 
 	return val, nil
+}
+
+// GetTime extracts text from the first element matching the selector and returns it as a string
+// This function can be extended to parse dates into specific formats if needed
+func GetTime(htmlText, selector, format string) (*time.Time, error) {
+	text, err := GetTextSingle(htmlText, selector)
+	if err != nil {
+		return nil, err
+	}
+
+	if text == "" {
+		return nil, fmt.Errorf("failed to get date text")
+	}
+
+	if format == "" {
+		return nil, fmt.Errorf("date format is required")
+	}
+
+	if format == "ago" {
+		// Handle relative time formats like "2 days ago", "3 hours ago"
+		pattern := regexp.MustCompile(`(?i)(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago`)
+		matches := pattern.FindStringSubmatch(text)
+		if len(matches) == 3 {
+			num, _ := strconv.Atoi(matches[1])
+			unit := strings.ToLower(matches[2])
+			var duration time.Duration
+			switch unit {
+			case "second":
+				duration = time.Duration(num) * time.Second
+			case "minute":
+				duration = time.Duration(num) * time.Minute
+			case "hour":
+				duration = time.Duration(num) * time.Hour
+			case "day":
+				duration = time.Duration(num) * 24 * time.Hour
+			case "week":
+				duration = time.Duration(num) * 7 * 24 * time.Hour
+			case "month":
+				duration = time.Duration(num) * 30 * 24 * time.Hour
+			case "year":
+				duration = time.Duration(num) * 365 * 24 * time.Hour
+			}
+			parsedTime := time.Now().Add(-duration)
+			return &parsedTime, nil
+		}
+		return nil, fmt.Errorf("failed to parse relative date '%s'", text)
+	}
+
+	parsedTime, err := time.Parse(format, text)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse date '%s' with format '%s': %w", text, format, err)
+	}
+
+	return &parsedTime, nil
 }
