@@ -16,11 +16,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'scraper.go'
-      - 'utils.go'
-      - 'go.mod'
-
 jobs:
   tag:
     runs-on: ubuntu-latest
