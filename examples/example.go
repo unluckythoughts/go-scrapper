@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	scraper "github.com/unluckythoughts/go-scrapper"
+	scraper "github.com/unluckythoughts/go-scraper"
 )
 
 func main() {
