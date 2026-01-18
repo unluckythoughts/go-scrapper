@@ -10,6 +10,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+type ExtractionFunc func(i int, s *goquery.Selection)
+
 func GetBaseURL(fullURL string) string {
 	// Use regex to extract the base URL (scheme + domain)
 	pattern := `^(https?://[^/]+)`
@@ -42,21 +44,58 @@ func GetAttrName(selector string) string {
 	return ""
 }
 
+// getSelectors splits a selector string by "||" to handle multiple selectors
+func getSelectors(selector string) []string {
+	return strings.Split(selector, "||")
+}
+
+func gethtmls(results *[]string) ExtractionFunc {
+	return func(i int, s *goquery.Selection) {
+		html, err := goquery.OuterHtml(s)
+		if err == nil && html != "" {
+			*results = append(*results, html)
+		}
+	}
+}
+
+func getTexts(results *[]string, selector string, first bool) ExtractionFunc {
+	return func(i int, s *goquery.Selection) {
+		text := strings.TrimSpace(s.Text())
+		attrName := GetAttrName(selector)
+		if attrName != "" {
+			text, _ = s.Attr(attrName)
+		}
+		if text != "" {
+			*results = append(*results, text)
+		}
+		if first {
+			return
+		}
+	}
+}
+
+func getResults(htmlText, selector string, fn ExtractionFunc) error {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlText))
+	if err != nil {
+		return err
+	}
+
+	for _, sel := range getSelectors(selector) {
+		sel := strings.TrimSpace(sel)
+		doc.Find(sel).Each(fn)
+	}
+
+	return nil
+}
+
 // GetOuterHTML extracts the outer HTML of elements matching the given CSS selector from HTML text
 // Returns a slice of outer HTML strings for all matching elements
 func GetOuterHTML(htmlText, selector string) ([]string, error) {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlText))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
 	var results []string
-	doc.Find(selector).Each(func(i int, s *goquery.Selection) {
-		html, err := goquery.OuterHtml(s)
-		if err == nil {
-			results = append(results, html)
-		}
-	})
+	err := getResults(htmlText, selector, gethtmls(&results))
+	if err != nil {
+		return nil, err
+	}
 
 	return results, nil
 }
@@ -64,22 +103,11 @@ func GetOuterHTML(htmlText, selector string) ([]string, error) {
 // GetText extracts the text content of elements matching the given CSS selector from HTML text
 // Returns a slice of text strings for all matching elements
 func GetText(htmlText, selector string) ([]string, error) {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlText))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
 	var results []string
-	attrName := GetAttrName(selector)
-	doc.Find(selector).Each(func(i int, s *goquery.Selection) {
-		text := strings.TrimSpace(s.Text())
-		if attrName != "" {
-			text, _ = s.Attr(attrName)
-		}
-		if text != "" {
-			results = append(results, text)
-		}
-	})
+	err := getResults(htmlText, selector, getTexts(&results, selector, false))
+	if err != nil {
+		return nil, err
+	}
 
 	return results, nil
 }
@@ -87,19 +115,17 @@ func GetText(htmlText, selector string) ([]string, error) {
 // GetTextSingle extracts the text content of the first element matching the given CSS selector
 // Returns empty string if no match found
 func GetTextSingle(htmlText, selector string) (string, error) {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlText))
+	var results []string
+	err := getResults(htmlText, selector, getTexts(&results, selector, true))
 	if err != nil {
-		return "", fmt.Errorf("failed to parse HTML: %w", err)
+		return "", err
 	}
 
-	selection := doc.Find(selector).First()
-	attrName := GetAttrName(selector)
-	if attrName != "" {
-		attrVal, _ := selection.Attr(attrName)
-		return strings.TrimSpace(attrVal), nil
+	if len(results) == 0 {
+		return "", nil
 	}
 
-	return strings.TrimSpace(selection.Text()), nil
+	return results[0], nil
 }
 
 // GetInt extracts text from the first element matching the selector and converts it to int
