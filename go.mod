@@ -1,6 +1,6 @@
 module github.com/unluckythoughts/go-scrapper
 
-go 1.24.3
+go 1.24
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0 // indirect
