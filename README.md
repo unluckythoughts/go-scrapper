@@ -159,14 +159,46 @@ fullURL := scraper.GetFullURL("https://example.com/page", "../other")
 
 ```go
 opts := scraper.Options{
-    UserAgent:      "MyBot/1.0",
-    AllowedDomains: []string{"example.com"},
-    MaxDepth:       3,
-    Async:          false,
-    MaxRetries:     5,
+    UserAgent:           "MyBot/1.0",
+    AllowedDomains:      []string{"example.com"},
+    MaxDepth:            3,
+    Async:               false,
+    MaxRetries:          5,
+    MaxParallelRequests: 4,
+    ForceRod:            false, // Set to true for sites with aggressive bot detection
 }
 s := scraper.New(opts)
 ```
+
+**Option Details:**
+- `UserAgent` - Custom user agent string
+- `AllowedDomains` - Restrict scraping to specific domains
+- `MaxDepth` - Maximum depth for link following
+- `Async` - Enable asynchronous scraping
+- `MaxRetries` - Maximum retry attempts for failed requests
+- `MaxParallelRequests` - Number of parallel requests (default: 4)
+- `ForceRod` - Force browser automation for all requests (bypasses Cloudflare, CAPTCHA)
+
+### Bot Detection and Cloudflare Bypass
+
+The scraper automatically detects bot challenges (Cloudflare, CAPTCHA) and attempts to bypass them using [rod](https://github.com/go-rod/rod) browser automation. For sites with aggressive bot detection, you can force rod usage:
+
+```go
+// Use rod browser for all requests (slower but bypasses most protection)
+opts := scraper.Options{
+    ForceRod:   true,
+    MaxRetries: 3,
+}
+s := scraper.New(opts)
+```
+
+**When to use ForceRod:**
+- Sites with Cloudflare protection
+- Sites that always show CAPTCHA
+- Sites that block automated requests
+- When fallback to browser automation isn't working
+
+**Note:** ForceRod is slower as it launches a real browser for each request, but it's more reliable for protected sites.
 
 ### Pagination Configuration
 

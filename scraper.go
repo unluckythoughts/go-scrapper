@@ -27,6 +27,9 @@ type Options struct {
 	MaxParallelRequests int
 	// MaxRetries specifies the maximum number of retries for requests
 	MaxRetries int
+	// ForceRod forces the use of rod browser for all requests (bypasses colly)
+	// Useful for sites with aggressive bot detection or Cloudflare protection
+	ForceRod bool
 }
 
 // PaginationConfig holds configuration for paginated scraping
@@ -145,8 +148,8 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 	// This gives time for CAPTCHA/challenge to load and potentially auto-solve
 	page.MustWaitStable()
 
-	// Wait a bit longer for potential redirects or auto-solving mechanisms
-	time.Sleep(5 * time.Second)
+	// Wait longer for Cloudflare challenges to auto-solve
+	time.Sleep(8 * time.Second)
 
 	// Check if we still have a challenge after waiting
 	html, err := page.HTML()
@@ -154,10 +157,10 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 		return nil, "", fmt.Errorf("failed to get HTML from rod: %w", err)
 	}
 
-	// If still a bot challenge, wait longer (user might need to solve CAPTCHA manually)
+	// If still a bot challenge, wait longer for Cloudflare to auto-solve
 	if isBotChallenge(html) {
-		// Wait up to 30 seconds for manual intervention or auto-solving
-		for i := 0; i < 6; i++ {
+		// Wait up to 45 seconds for Cloudflare challenge to auto-solve
+		for i := 0; i < 9; i++ {
 			time.Sleep(5 * time.Second)
 			html, err = page.HTML()
 			if err != nil {
@@ -196,6 +199,19 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 // Implements exponential backoff retry for 429 (Too Many Requests) status codes
 // Detects bot challenges and uses rod to solve CAPTCHAs and obtain cookies
 func (s *Scraper) ScrapeHTML(url string) (string, error) {
+	// If ForceRod is enabled, skip colly and use rod directly
+	if s.options.ForceRod {
+		cookies, htmlContent, err := s.solveWithRod(url)
+		if err != nil {
+			return "", fmt.Errorf("failed to scrape with rod: %w", err)
+		}
+		// Check if bot challenge persists
+		if isBotChallenge(htmlContent) {
+			return "", fmt.Errorf("bot challenge persists even with rod (cookies: %d)", len(cookies))
+		}
+		return htmlContent, nil
+	}
+
 	const initialBackoff = 1 * time.Second
 	maxRetries := s.options.MaxRetries
 	if maxRetries == 0 {
