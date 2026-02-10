@@ -12,6 +12,7 @@ import (
 	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 	"github.com/go-rod/rod"
 	"github.com/gocolly/colly/v2"
+	"go.uber.org/zap"
 )
 
 // Options provides configuration for the Scraper
@@ -31,6 +32,8 @@ type Options struct {
 	// UseCloudflareBypass enables Cloudflare bypass using proper TLS and headers
 	// Helps avoid triggering Cloudflare challenges in the first place
 	UseCloudflareBypass bool
+	// Logger allows custom logging in debug (optional)
+	Logger *zap.Logger
 }
 
 // PaginationConfig holds configuration for paginated scraping
@@ -70,6 +73,9 @@ func New(opts Options) *Scraper {
 	if opts.MaxParallelRequests <= 0 {
 		opts.MaxParallelRequests = 4
 	}
+	if opts.Logger != nil {
+		opts.Logger.Debug("Scraper initializing with options", zap.Any("options", opts))
+	}
 
 	return &Scraper{options: opts}
 }
@@ -81,6 +87,12 @@ func NewDefault() *Scraper {
 		MaxRetries:          5,
 		MaxParallelRequests: 4,
 	})
+}
+func (s *Scraper) log(msg string, fields ...zap.Field) {
+	if s.options.Logger == nil {
+		return
+	}
+	s.options.Logger.Debug(msg, fields...)
 }
 
 // createCollector creates a new colly collector with the scraper's options
@@ -113,19 +125,29 @@ func (s *Scraper) createCollector(additionalOpts ...colly.CollectorOption) *coll
 	return c
 }
 
-// isBotChallenge detects if the HTML content contains a bot challenge or CAPTCHA
+// IsBotChallenge detects if the HTML content contains a bot challenge or CAPTCHA
 // Only detects actual challenge pages, not just Cloudflare presence
-func isBotChallenge(html string) bool {
+// Returns true if challenge detected
+func (s *Scraper) isBotChallenge(html string) bool {
 	// Check for actual challenge indicators (more specific)
 	// Note: Just having "cloudflare" in HTML doesn't mean it's blocking
 	htmlLower := strings.ToLower(html)
 
 	// Cloudflare challenge page specific indicators
-	if strings.Contains(htmlLower, "cf-challenge-running") ||
-		strings.Contains(htmlLower, "challenge-running") ||
-		strings.Contains(htmlLower, "challenge-platform") ||
-		strings.Contains(htmlLower, "cf-browser-verification") {
-		return true
+	cfIndicators := map[string]string{
+		"cf-challenge-running":    "Cloudflare challenge is running",
+		"challenge-running":       "Generic challenge is running",
+		"challenge-platform":      "Challenge platform detected",
+		"cf-browser-verification": "Cloudflare browser verification active",
+	}
+
+	for indicator, _ := range cfIndicators {
+		if strings.Contains(htmlLower, indicator) {
+			// Find the context around the indicator
+			context := extractContext(html, indicator, 200)
+			s.log("Bot challenge detected", zap.String("indicator", indicator), zap.String("context", context))
+			return true
+		}
 	}
 
 	// Specific challenge messages (must appear in visible text)
@@ -141,6 +163,8 @@ func isBotChallenge(html string) bool {
 
 	for _, msg := range challengeMessages {
 		if strings.Contains(htmlLower, msg) {
+			context := extractContext(html, msg, 200)
+			s.log("Bot challenge message detected", zap.String("message", msg), zap.String("context", context))
 			return true
 		}
 	}
@@ -148,10 +172,45 @@ func isBotChallenge(html string) bool {
 	// CAPTCHA indicators
 	if (strings.Contains(htmlLower, "captcha") || strings.Contains(htmlLower, "recaptcha")) &&
 		(strings.Contains(htmlLower, "solve") || strings.Contains(htmlLower, "verify")) {
+		context := extractContext(html, "captcha", 200)
+		s.log("CAPTCHA detected with solve/verify prompt", zap.String("context", context))
 		return true
 	}
 
 	return false
+}
+
+// extractContext extracts surrounding context around a found string in HTML
+func extractContext(html, searchStr string, contextLen int) string {
+	htmlLower := strings.ToLower(html)
+	searchLower := strings.ToLower(searchStr)
+
+	pos := strings.Index(htmlLower, searchLower)
+	if pos == -1 {
+		return ""
+	}
+
+	// Calculate start and end positions
+	start := pos - contextLen
+	if start < 0 {
+		start = 0
+	}
+	end := pos + len(searchStr) + contextLen
+	if end > len(html) {
+		end = len(html)
+	}
+
+	// Extract context and clean it up
+	context := html[start:end]
+	// Replace newlines and multiple spaces for readability
+	context = strings.ReplaceAll(context, "\n", " ")
+	context = strings.ReplaceAll(context, "\t", " ")
+	// Replace multiple spaces with single space
+	for strings.Contains(context, "  ") {
+		context = strings.ReplaceAll(context, "  ", " ")
+	}
+
+	return strings.TrimSpace(context)
 }
 
 // solveWithRod uses rod to load the page in a real browser, solve challenges, and return cookies
@@ -176,7 +235,9 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 	}
 
 	// If still a bot challenge, wait longer for Cloudflare to auto-solve
-	if isBotChallenge(html) {
+	isChallenge := s.isBotChallenge(html)
+	if isChallenge {
+		fmt.Printf("[Rod] Challenge detected after initial wait\n")
 		// Wait up to 45 seconds for Cloudflare challenge to auto-solve
 		for i := 0; i < 9; i++ {
 			time.Sleep(5 * time.Second)
@@ -184,9 +245,14 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to get HTML from rod: %w", err)
 			}
-			if !isBotChallenge(html) {
+			isChallenge = s.isBotChallenge(html)
+			if !isChallenge {
+				s.log("[Rod] Challenge resolved after waiting", zap.Int("waited_seconds", 8+(i+1)*5))
 				break
 			}
+		}
+		if isChallenge {
+			s.log("[Rod] Challenge still present after max wait", zap.Int("total_waited_seconds", 8+9*5))
 		}
 	}
 
@@ -259,7 +325,9 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 		// If successful, check for bot challenge
 		if lastError == nil && statusCode == 200 {
 			// Check if we hit a bot challenge
-			if isBotChallenge(htmlContent) {
+			isChallenge := s.isBotChallenge(htmlContent)
+			if isChallenge {
+				s.log("[Colly] Bot challenge detected in response", zap.String("url", url), zap.Int("status_code", statusCode))
 				// Use rod to solve the challenge
 				var err error
 				cookies, htmlContent, err = s.solveWithRod(url)
@@ -268,9 +336,11 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 				}
 
 				// If still a bot challenge after rod, return error
-				if isBotChallenge(htmlContent) {
+				isChallenge = s.isBotChallenge(htmlContent)
+				if isChallenge {
 					return "", fmt.Errorf("bot challenge persists after rod attempt")
 				}
+				s.log("[Rod] Successfully bypassed challenge with rod", zap.String("url", url))
 			}
 			return htmlContent, nil
 		}
