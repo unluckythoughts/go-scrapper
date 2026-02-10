@@ -177,28 +177,68 @@ s := scraper.New(opts)
 - `Async` - Enable asynchronous scraping
 - `MaxRetries` - Maximum retry attempts for failed requests
 - `MaxParallelRequests` - Number of parallel requests (default: 4)
+- `UseCloudflareBypass` - Enable TLS/header bypass to avoid triggering challenges (recommended)
 - `ForceRod` - Force browser automation for all requests (bypasses Cloudflare, CAPTCHA)
 
 ### Bot Detection and Cloudflare Bypass
 
-The scraper automatically detects bot challenges (Cloudflare, CAPTCHA) and attempts to bypass them using [rod](https://github.com/go-rod/rod) browser automation. For sites with aggressive bot detection, you can force rod usage:
+The scraper provides **two layers** of Cloudflare protection:
+
+#### 1. Cloudflare Bypass (Preventive) - `UseCloudflareBypass`
+Uses [cloudflare-bp-go](https://github.com/DaRealFreak/cloudflare-bp-go) to configure proper TLS settings and headers to **avoid triggering** Cloudflare challenges in the first place.
 
 ```go
-// Use rod browser for all requests (slower but bypasses most protection)
 opts := scraper.Options{
-    ForceRod:   true,
+    UseCloudflareBypass: true, // Recommended for Cloudflare-protected sites
+    MaxRetries:          5,
+}
+s := scraper.New(opts)
+```
+
+**How it works:**
+- Sets proper TLS configuration (curves, ciphers)
+- Adds validated HTTP headers (Accept, User-Agent, etc.)
+- Makes requests look more like a real browser
+- **Fast** - no browser needed
+- **Prevents** challenges from appearing
+
+#### 2. Rod Browser (Reactive) - `ForceRod`
+Uses [rod](https://github.com/go-rod/rod) browser automation to **solve challenges** that are already displayed.
+
+```go
+opts := scraper.Options{
+    ForceRod:   true, // Launches real browser for each request
     MaxRetries: 3,
 }
 s := scraper.New(opts)
 ```
 
-**When to use ForceRod:**
-- Sites with Cloudflare protection
-- Sites that always show CAPTCHA
-- Sites that block automated requests
-- When fallback to browser automation isn't working
+**How it works:**
+- Launches a real Chromium browser
+- Waits for Cloudflare challenges to auto-solve
+- Extracts cookies and page content
+- **Slow** - real browser overhead
+- **Solves** existing challenges
 
-**Note:** ForceRod is slower as it launches a real browser for each request, but it's more reliable for protected sites.
+#### 3. Combined Approach (Recommended for Aggressive Protection)
+Use both for maximum success rate:
+
+```go
+opts := scraper.Options{
+    UseCloudflareBypass: true, // First: try to avoid challenges
+    ForceRod:            true, // Fallback: solve challenges if they appear
+    MaxRetries:          3,
+}
+s := scraper.New(opts)
+```
+
+**When to use what:**
+- **Normal sites**: No options needed
+- **Light Cloudflare**: `UseCloudflareBypass: true`
+- **Aggressive Cloudflare**: `UseCloudflareBypass: true` + `ForceRod: true`
+- **Always blocked**: `ForceRod: true`
+
+**Automatic fallback**: Even without `ForceRod`, the scraper automatically detects bot challenges and attempts rod-based bypass. `ForceRod` just skips the initial attempt and goes straight to the browser.
 
 ### Pagination Configuration
 

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 	"github.com/go-rod/rod"
 	"github.com/gocolly/colly/v2"
 )
@@ -27,9 +28,9 @@ type Options struct {
 	MaxParallelRequests int
 	// MaxRetries specifies the maximum number of retries for requests
 	MaxRetries int
-	// ForceRod forces the use of rod browser for all requests (bypasses colly)
-	// Useful for sites with aggressive bot detection or Cloudflare protection
-	ForceRod bool
+	// UseCloudflareBypass enables Cloudflare bypass using proper TLS and headers
+	// Helps avoid triggering Cloudflare challenges in the first place
+	UseCloudflareBypass bool
 }
 
 // PaginationConfig holds configuration for paginated scraping
@@ -101,8 +102,12 @@ func (s *Scraper) createCollector(additionalOpts ...colly.CollectorOption) *coll
 
 	c := colly.NewCollector(collyOpts...)
 
-	if s.options.Async {
-		c.Async = true
+	// Add Cloudflare bypass if enabled (must be set after collector creation)
+	if s.options.UseCloudflareBypass {
+		// Create transport with Cloudflare bypass
+		transport := &http.Transport{}
+		roundTripper := cloudflarebp.AddCloudFlareByPass(transport)
+		c.WithTransport(roundTripper)
 	}
 
 	return c
@@ -199,19 +204,6 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 // Implements exponential backoff retry for 429 (Too Many Requests) status codes
 // Detects bot challenges and uses rod to solve CAPTCHAs and obtain cookies
 func (s *Scraper) ScrapeHTML(url string) (string, error) {
-	// If ForceRod is enabled, skip colly and use rod directly
-	if s.options.ForceRod {
-		cookies, htmlContent, err := s.solveWithRod(url)
-		if err != nil {
-			return "", fmt.Errorf("failed to scrape with rod: %w", err)
-		}
-		// Check if bot challenge persists
-		if isBotChallenge(htmlContent) {
-			return "", fmt.Errorf("bot challenge persists even with rod (cookies: %d)", len(cookies))
-		}
-		return htmlContent, nil
-	}
-
 	const initialBackoff = 1 * time.Second
 	maxRetries := s.options.MaxRetries
 	if maxRetries == 0 {
