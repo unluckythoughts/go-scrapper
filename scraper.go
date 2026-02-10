@@ -133,21 +133,33 @@ func (s *Scraper) isBotChallenge(html string) bool {
 	// Note: Just having "cloudflare" in HTML doesn't mean it's blocking
 	htmlLower := strings.ToLower(html)
 
-	// Cloudflare challenge page specific indicators
-	cfIndicators := map[string]string{
+	// High-confidence challenge indicators (active challenges only)
+	// Note: "challenge-platform" is excluded - it's often present for passive monitoring
+	highConfidenceIndicators := map[string]string{
 		"cf-challenge-running":    "Cloudflare challenge is running",
 		"challenge-running":       "Generic challenge is running",
-		"challenge-platform":      "Challenge platform detected",
 		"cf-browser-verification": "Cloudflare browser verification active",
 	}
 
-	for indicator, _ := range cfIndicators {
+	for indicator, _ := range highConfidenceIndicators {
 		if strings.Contains(htmlLower, indicator) {
-			// Find the context around the indicator
 			context := extractContext(html, indicator, 200)
-			s.log("Bot challenge detected", zap.String("indicator", indicator), zap.String("context", context))
+			s.log("Active bot challenge detected", zap.String("indicator", indicator), zap.String("context", context))
 			return true
 		}
+	}
+
+	// Check for challenge-platform ONLY if page has minimal content
+	// (indicates active challenge vs passive monitoring)
+	if strings.Contains(htmlLower, "challenge-platform") {
+		hasContent := s.hasSubstantialContent(html)
+		if !hasContent {
+			context := extractContext(html, "challenge-platform", 200)
+			s.log("Challenge platform detected with minimal content", zap.String("context", context))
+			return true
+		}
+		// If substantial content exists, it's just passive monitoring - not blocking
+		s.log("Challenge platform script present but content exists (passive monitoring)")
 	}
 
 	// Specific challenge messages (must appear in visible text)
@@ -175,6 +187,58 @@ func (s *Scraper) isBotChallenge(html string) bool {
 		context := extractContext(html, "captcha", 200)
 		s.log("CAPTCHA detected with solve/verify prompt", zap.String("context", context))
 		return true
+	}
+
+	return false
+}
+
+// hasSubstantialContent checks if the HTML page has actual content
+// vs being a pure challenge/error page with minimal content
+func (s *Scraper) hasSubstantialContent(html string) bool {
+	htmlLower := strings.ToLower(html)
+
+	// Look for common content indicators that suggest a real page with data
+	contentIndicators := []string{
+		"<article",
+		"<main",
+		"class=\"content\"",
+		"class=\"post\"",
+		"class=\"item\"",
+		"class=\"list\"",
+		"class=\"card\"",
+		"class=\"product\"",
+		"id=\"content\"",
+		"id=\"main\"",
+	}
+
+	indicatorCount := 0
+	for _, indicator := range contentIndicators {
+		if strings.Contains(htmlLower, indicator) {
+			indicatorCount++
+		}
+	}
+
+	// If we find multiple content indicators, it's a real page
+	if indicatorCount >= 2 {
+		return true
+	}
+
+	// Check for substantial body content (more than just navigation/header)
+	// Extract text between <body> and </body>
+	bodyStart := strings.Index(htmlLower, "<body")
+	bodyEnd := strings.Index(htmlLower, "</body>")
+	if bodyStart != -1 && bodyEnd != -1 && bodyEnd > bodyStart {
+		bodyContent := html[bodyStart:bodyEnd]
+
+		// Count links and interactive elements (real content has many)
+		linkCount := strings.Count(bodyContent, "<a href=")
+		divCount := strings.Count(bodyContent, "<div")
+
+		// Real pages typically have many links and divs
+		// Challenge pages have minimal structure
+		if linkCount > 20 || divCount > 30 {
+			return true
+		}
 	}
 
 	return false
