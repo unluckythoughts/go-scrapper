@@ -114,30 +114,43 @@ func (s *Scraper) createCollector(additionalOpts ...colly.CollectorOption) *coll
 }
 
 // isBotChallenge detects if the HTML content contains a bot challenge or CAPTCHA
+// Only detects actual challenge pages, not just Cloudflare presence
 func isBotChallenge(html string) bool {
-	// Common indicators of bot challenges
-	indicators := []string{
-		"captcha",
-		"CAPTCHA",
-		"cf-challenge",
-		"cloudflare",
-		"Please verify you are a human",
-		"Access denied",
-		"Security check",
-		"challenge-platform",
-		"Just a moment",
-		"Checking your browser",
-		"DDoS protection",
-		"are you a robot",
-		"bot detection",
+	// Check for actual challenge indicators (more specific)
+	// Note: Just having "cloudflare" in HTML doesn't mean it's blocking
+	htmlLower := strings.ToLower(html)
+
+	// Cloudflare challenge page specific indicators
+	if strings.Contains(htmlLower, "cf-challenge-running") ||
+		strings.Contains(htmlLower, "challenge-running") ||
+		strings.Contains(htmlLower, "challenge-platform") ||
+		strings.Contains(htmlLower, "cf-browser-verification") {
+		return true
 	}
 
-	htmlLower := strings.ToLower(html)
-	for _, indicator := range indicators {
-		if strings.Contains(htmlLower, strings.ToLower(indicator)) {
+	// Specific challenge messages (must appear in visible text)
+	challengeMessages := []string{
+		"just a moment...",
+		"checking your browser",
+		"please verify you are a human",
+		"ddos protection by cloudflare",
+		"enable javascript and cookies",
+		"complete the security check",
+		"one more step",
+	}
+
+	for _, msg := range challengeMessages {
+		if strings.Contains(htmlLower, msg) {
 			return true
 		}
 	}
+
+	// CAPTCHA indicators
+	if (strings.Contains(htmlLower, "captcha") || strings.Contains(htmlLower, "recaptcha")) &&
+		(strings.Contains(htmlLower, "solve") || strings.Contains(htmlLower, "verify")) {
+		return true
+	}
+
 	return false
 }
 
