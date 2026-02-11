@@ -155,9 +155,16 @@ func GetFloat(htmlText, selector string) (float64, error) {
 		return 0.0, nil
 	}
 
-	// Clean the text - remove commas, currency symbols, and spaces using regex
-	cleanPattern := regexp.MustCompile(`[^0-9-.]+`)
-	cleanText := cleanPattern.ReplaceAllString(text, "")
+	// Extract the first valid float pattern from the text
+	// This pattern matches: optional minus sign, followed by digits, optionally followed by a dot and more digits
+	floatPattern := regexp.MustCompile(`-?\d+(?:\.\d+)?`)
+	matches := floatPattern.FindStringSubmatch(text)
+
+	if len(matches) == 0 {
+		return 0.0, fmt.Errorf("failed to convert '%s' to float: no numeric value found", text)
+	}
+
+	cleanText := matches[0]
 
 	val, err := strconv.ParseFloat(cleanText, 64)
 	if err != nil {
