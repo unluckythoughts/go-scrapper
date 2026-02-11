@@ -155,6 +155,9 @@ func GetFloat(htmlText, selector string) (float64, error) {
 		return 0.0, nil
 	}
 
+	// Remove commas from the text first to handle formatted numbers like 1,234.56
+	text = strings.ReplaceAll(text, ",", "")
+
 	// Extract the first valid float pattern from the text
 	// This pattern matches: optional minus sign, followed by digits, optionally followed by a dot and more digits
 	floatPattern := regexp.MustCompile(`-?\d+(?:\.\d+)?`)
