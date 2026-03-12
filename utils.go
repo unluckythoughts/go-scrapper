@@ -27,6 +27,10 @@ func GetFullURL(baseURL, relativePath string) string {
 	if strings.HasPrefix(relativePath, "/") {
 		return GetBaseURL(baseURL) + relativePath
 	}
+	if strings.HasPrefix(relativePath, "?") {
+		return GetBaseURL(baseURL) + "/" + relativePath
+	}
+
 	return relativePath // Already a full URL
 }
 
