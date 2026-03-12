@@ -406,6 +406,7 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 				}
 				s.log("[Rod] Successfully bypassed challenge with rod", zap.String("url", url))
 			}
+			s.log("[Colly] Successfully scraped page", zap.String("url", url), zap.Int("status_code", statusCode))
 			return htmlContent, nil
 		}
 

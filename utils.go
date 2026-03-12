@@ -12,6 +12,14 @@ import (
 
 type ExtractionFunc func(i int, s *goquery.Selection)
 
+// GetCurrentURL extracts just the path from a full URL, removing the query parameters and fragments
+func GetCurrentURL(fullURL string) string {
+	// Use regex to extract the path and query from the full URL
+	pattern := `[?].*$`
+	re := regexp.MustCompile(pattern)
+	return re.ReplaceAllString(fullURL, "")
+}
+
 func GetBaseURL(fullURL string) string {
 	// Use regex to extract the base URL (scheme + domain)
 	pattern := `^(https?://[^/]+)`
@@ -28,7 +36,7 @@ func GetFullURL(baseURL, relativePath string) string {
 		return GetBaseURL(baseURL) + relativePath
 	}
 	if strings.HasPrefix(relativePath, "?") {
-		return GetBaseURL(baseURL) + "/" + relativePath
+		return GetCurrentURL(baseURL) + "/" + relativePath
 	}
 
 	return relativePath // Already a full URL
