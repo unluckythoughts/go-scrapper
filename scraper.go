@@ -301,7 +301,7 @@ func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
 	// If still a bot challenge, wait longer for Cloudflare to auto-solve
 	isChallenge := s.isBotChallenge(html)
 	if isChallenge {
-		fmt.Printf("[Rod] Challenge detected after initial wait\n")
+		s.log("[Rod] Challenge detected after initial wait")
 		// Wait up to 45 seconds for Cloudflare challenge to auto-solve
 		for i := 0; i < 9; i++ {
 			time.Sleep(5 * time.Second)
