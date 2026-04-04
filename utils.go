@@ -15,7 +15,7 @@ type ExtractionFunc func(i int, s *goquery.Selection)
 var (
 	reQueryStrip   = regexp.MustCompile(`[?].*$`)
 	reBaseURL      = regexp.MustCompile(`^(https?://[^/]+)`)
-	reAttrSelector = regexp.MustCompile(`\[([a-zA-Z0-9\-_]+)(?:[~\|\^\$\*]?=.*?)?\]$`)
+	reAttrSelector = regexp.MustCompile(`\[([a-zA-Z0-9\-_]+)(?:[~\|\^\$\*]?=[^\]]*?)?\]$`)
 	reFloat        = regexp.MustCompile(`-?\d+(?:\.\d+)?`)
 	reRelativeTime = regexp.MustCompile(`(?i)(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago`)
 )
