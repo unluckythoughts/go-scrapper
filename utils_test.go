@@ -69,7 +69,7 @@ func TestGetAttrName(t *testing.T) {
 		{"Attribute ends with selector", "a[href$='.pdf']", "href"},
 		{"Complex selector", "div.class a[href]", "href"},
 		{"No attribute", "div.class", ""},
-		{"Multiple attributes returns first matched", "input[type='text'][name]", "type"},
+		{"Multiple attributes returns last matched", "input[type='text'][name]", "name"},
 		{"Hyphenated attribute", "div[data-test-id]", "data-test-id"},
 		{"Underscore attribute", "div[data_test_id]", "data_test_id"},
 	}
