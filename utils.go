@@ -12,19 +12,21 @@ import (
 
 type ExtractionFunc func(i int, s *goquery.Selection)
 
+var (
+	reQueryStrip   = regexp.MustCompile(`[?].*$`)
+	reBaseURL      = regexp.MustCompile(`^(https?://[^/]+)`)
+	reAttrSelector = regexp.MustCompile(`\[([a-zA-Z0-9\-_]+)(?:[~\|\^\$\*]?=.*?)?\]$`)
+	reFloat        = regexp.MustCompile(`-?\d+(?:\.\d+)?`)
+	reRelativeTime = regexp.MustCompile(`(?i)(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago`)
+)
+
 // GetCurrentURL extracts just the path from a full URL, removing the query parameters and fragments
 func GetCurrentURL(fullURL string) string {
-	// Use regex to extract the path and query from the full URL
-	pattern := `[?].*$`
-	re := regexp.MustCompile(pattern)
-	return re.ReplaceAllString(fullURL, "")
+	return reQueryStrip.ReplaceAllString(fullURL, "")
 }
 
 func GetBaseURL(fullURL string) string {
-	// Use regex to extract the base URL (scheme + domain)
-	pattern := `^(https?://[^/]+)`
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(fullURL)
+	matches := reBaseURL.FindStringSubmatch(fullURL)
 	if len(matches) < 2 {
 		return fullURL // Return as is if no match found
 	}
@@ -46,10 +48,7 @@ func GetFullURL(baseURL, relativePath string) string {
 // Returns the attribute name if the selector ends with an attribute selector, empty string otherwise
 // Examples: "div[data-id]" -> "data-id", "input[type='text']" -> "type", "a[href]" -> "href"
 func GetAttrName(selector string) string {
-	// Match attribute selectors and capture the attribute name
-	// Patterns: [attr], [attr=value], [attr="value"], [attr*=value], [attr~=value], etc.
-	attrSelectorPattern := regexp.MustCompile(`\[([a-zA-Z0-9\-_]+)(?:[~\|\^\$\*]?=.*?)?\]$`)
-	matches := attrSelectorPattern.FindStringSubmatch(strings.TrimSpace(selector))
+	matches := reAttrSelector.FindStringSubmatch(strings.TrimSpace(selector))
 	if len(matches) >= 2 {
 		return matches[1]
 	}
@@ -171,9 +170,7 @@ func GetFloat(htmlText, selector string) (float64, error) {
 	text = strings.ReplaceAll(text, ",", "")
 
 	// Extract the first valid float pattern from the text
-	// This pattern matches: optional minus sign, followed by digits, optionally followed by a dot and more digits
-	floatPattern := regexp.MustCompile(`-?\d+(?:\.\d+)?`)
-	matches := floatPattern.FindStringSubmatch(text)
+	matches := reFloat.FindStringSubmatch(text)
 
 	if len(matches) == 0 {
 		return 0.0, fmt.Errorf("failed to convert '%s' to float: no numeric value found", text)
@@ -206,9 +203,7 @@ func GetTime(htmlText, selector, format string) (*time.Time, error) {
 	}
 
 	if format == "ago" {
-		// Handle relative time formats like "2 days ago", "3 hours ago"
-		pattern := regexp.MustCompile(`(?i)(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago`)
-		matches := pattern.FindStringSubmatch(text)
+		matches := reRelativeTime.FindStringSubmatch(text)
 		if len(matches) == 3 {
 			num, _ := strconv.Atoi(matches[1])
 			unit := strings.ToLower(matches[2])
