@@ -355,10 +355,10 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 
 	var htmlContent string
 	var lastError error
+	var cookies []*http.Cookie
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		var statusCode int
-		var cookies []*http.Cookie
 
 		c := s.createCollector()
 
