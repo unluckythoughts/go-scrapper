@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/gocolly/colly/v2"
 	"go.uber.org/zap"
 )
@@ -279,15 +281,23 @@ func extractContext(html, searchStr string, contextLen int) string {
 
 // solveWithRod uses rod to load the page in a real browser, solve challenges, and return cookies
 func (s *Scraper) solveWithRod(url string) ([]*http.Cookie, string, error) {
-	browser := rod.New().MustConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	browser := rod.New().Context(ctx).MustConnect()
 	defer browser.MustClose()
 
-	page := browser.MustPage(url)
-	defer page.MustClose()
+	page, err := browser.Page(proto.TargetCreateTarget{URL: url})
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to open page: %w", err)
+	}
+	defer page.Close()
 
 	// Wait for the page to stabilize (adjust timeout as needed)
 	// This gives time for CAPTCHA/challenge to load and potentially auto-solve
-	page.MustWaitStable()
+	if err := page.WaitStable(500 * time.Millisecond); err != nil {
+		return nil, "", fmt.Errorf("failed waiting for page to stabilize: %w", err)
+	}
 
 	// Wait longer for Cloudflare challenges to auto-solve
 	time.Sleep(8 * time.Second)
