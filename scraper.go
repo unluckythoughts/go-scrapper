@@ -508,6 +508,7 @@ func (s *Scraper) scrapePageParallel(url, selector, lastPageSelector, nextPageUR
 	lastPage, err := GetInt(htmlContent, lastPageSelector)
 	if err != nil || lastPage < 2 {
 		// Unable to determine last page, exit
+		close(resultsChan)
 		return
 	}
 
