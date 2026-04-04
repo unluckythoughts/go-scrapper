@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -379,9 +380,11 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 		// Set cookies if we have them from a previous rod session
 		if len(cookies) > 0 {
 			c.OnRequest(func(r *colly.Request) {
+				parts := make([]string, 0, len(cookies))
 				for _, cookie := range cookies {
-					r.Headers.Set("Cookie", fmt.Sprintf("%s=%s", cookie.Name, cookie.Value))
+					parts = append(parts, fmt.Sprintf("%s=%s", cookie.Name, neturl.QueryEscape(cookie.Value)))
 				}
+				r.Headers.Set("Cookie", strings.Join(parts, "; "))
 			})
 		}
 
