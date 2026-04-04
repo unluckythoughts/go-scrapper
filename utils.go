@@ -106,6 +106,7 @@ func getResults(htmlText, selector string, fn ExtractionFunc) error {
 
 	if selector == "" {
 		doc.Each(fn)
+		return nil
 	}
 
 	for _, sel := range getSelectors(selector) {
