@@ -135,13 +135,13 @@ func (s *Scraper) isBotChallenge(html string) bool {
 
 	// High-confidence challenge indicators (active challenges only)
 	// Note: "challenge-platform" is excluded - it's often present for passive monitoring
-	highConfidenceIndicators := map[string]string{
-		"cf-challenge-running":    "Cloudflare challenge is running",
-		"challenge-running":       "Generic challenge is running",
-		"cf-browser-verification": "Cloudflare browser verification active",
+	highConfidenceIndicators := []string{
+		"cf-challenge-running",
+		"challenge-running",
+		"cf-browser-verification",
 	}
 
-	for indicator, _ := range highConfidenceIndicators {
+	for _, indicator := range highConfidenceIndicators {
 		if strings.Contains(htmlLower, indicator) {
 			context := extractContext(html, indicator, 200)
 			s.log("Active bot challenge detected", zap.String("indicator", indicator), zap.String("context", context))
