@@ -111,6 +111,10 @@ func (s *Scraper) createCollector(additionalOpts ...colly.CollectorOption) *coll
 		collyOpts = append(collyOpts, colly.MaxDepth(s.options.MaxDepth))
 	}
 
+	if s.options.Async {
+		collyOpts = append(collyOpts, colly.Async(true))
+	}
+
 	// Add any additional options passed to this method
 	collyOpts = append(collyOpts, additionalOpts...)
 
@@ -395,6 +399,9 @@ func (s *Scraper) ScrapeHTML(url string) (string, error) {
 		})
 
 		lastError = c.Visit(url)
+		if s.options.Async {
+			c.Wait()
+		}
 
 		// If successful, check for bot challenge
 		if lastError == nil && statusCode == 200 {
