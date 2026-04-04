@@ -69,7 +69,7 @@ func gethtmls(results *[]string) ExtractionFunc {
 	}
 }
 
-func getTexts(results *[]string, selector string, first bool) ExtractionFunc {
+func getTexts(results *[]string, selector string) ExtractionFunc {
 	return func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
 		attrName := GetAttrName(selector)
@@ -79,8 +79,21 @@ func getTexts(results *[]string, selector string, first bool) ExtractionFunc {
 		if text != "" {
 			*results = append(*results, text)
 		}
-		if first {
+	}
+}
+
+func getTextFirst(results *[]string, selector string) ExtractionFunc {
+	return func(i int, s *goquery.Selection) {
+		if len(*results) > 0 {
 			return
+		}
+		text := strings.TrimSpace(s.Text())
+		attrName := GetAttrName(selector)
+		if attrName != "" {
+			text, _ = s.Attr(attrName)
+		}
+		if text != "" {
+			*results = append(*results, text)
 		}
 	}
 }
@@ -119,7 +132,7 @@ func GetOuterHTML(htmlText, selector string) ([]string, error) {
 // Returns a slice of text strings for all matching elements
 func GetText(htmlText, selector string) ([]string, error) {
 	var results []string
-	err := getResults(htmlText, selector, getTexts(&results, selector, false))
+	err := getResults(htmlText, selector, getTexts(&results, selector))
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +144,7 @@ func GetText(htmlText, selector string) ([]string, error) {
 // Returns empty string if no match found
 func GetTextSingle(htmlText, selector string) (string, error) {
 	var results []string
-	err := getResults(htmlText, selector, getTexts(&results, selector, true))
+	err := getResults(htmlText, selector, getTextFirst(&results, selector))
 	if err != nil {
 		return "", err
 	}
